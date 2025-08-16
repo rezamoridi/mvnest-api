@@ -3,7 +3,7 @@ from sqlalchemy import text
 
 # Import your dependencies and logger
 from db import get_db, Session
-from log_config import logger
+from app_log_config import logger
 
 router = APIRouter()
 

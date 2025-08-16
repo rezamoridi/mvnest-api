@@ -11,36 +11,51 @@ from sqlalchemy.exc import OperationalError
 
 # Import resources from other modules
 from db import engine
-from log_config import logger
+from app_log_config import logger
 from routers import health_router, auth_router, admin_router, user_router
-
+from middleware.auth_middleware import validate_jwt_algorithm_env, InvalidAlgorithmError
 
 
 
 # Load environment variables
 load_dotenv()
 APP_ENV = os.getenv("ENV", default="dev")
+ORIGINS = [o.strip() for o in os.getenv("ORIGINS", "").split(",") if o.strip()]
 
 # Api lifespan config
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Handles application startup and shutdown events.
+    Critical startup errors are logged and sinks are flushed before exiting.
     """
     logger.info("Application startup: Initializing resources...")
-    logger.warning(f"Application Environment: {APP_ENV}")
+    
     try:
-        with engine.connect() as connection:
-            logger.success("Database connection successful!")
-        yield
-    except OperationalError as e:
-        logger.critical(f"Database connection failed during startup: {e}")
-        # Optionally, you can raise the exception to stop the app
-        # raise e
-        yield # Still yield to allow uvicorn to handle the shutdown
-    finally:
-        logger.info("Application shutdown: Releasing resources...")
-        engine.dispose()
+        # Perform all critical startup tasks
+        validate_jwt_algorithm_env()
+        engine.connect().close() # A simple connection check
+        logger.warning(f"Environment setup: {APP_ENV}")
+        logger.success("All startup checks passed!")
+
+    except (InvalidAlgorithmError, OperationalError) as e:
+        # 1. Log the exception as you were doing
+        logger.exception("A fatal error occurred during startup. The application will shut down.")
+        
+        # 2. Force Loguru to flush all sinks before the process terminates
+        logger.shutdown() 
+        
+        # 3. Re-raise the exception to ensure the application stops
+        raise e
+
+    # If we get here, startup was successful
+    yield
+
+    # Shutdown code runs here
+    logger.info("Application shutdown: Releasing resources...")
+    engine.dispose()
+
+
 
 # Create the FastAPI app instance with the configured lifespan
 app = FastAPI(
@@ -57,8 +72,9 @@ async def request_logging_middleware(request: Request, call_next):
     logger.info(f"rid={request_id} start request path={request.url.path} method={request.method}")
     start_time = time.time()
     
+
     response = await call_next(request)
-    
+
     process_time = (time.time() - start_time) * 1000
     formatted_process_time = '{0:.2f}'.format(process_time)
     logger.info(f"rid={request_id} completed_in={formatted_process_time}ms status_code={response.status_code}")
@@ -68,7 +84,7 @@ async def request_logging_middleware(request: Request, call_next):
 # Add Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this for production
+    allow_origins=ORIGINS,  # Adjust this for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

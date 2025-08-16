@@ -11,8 +11,10 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "mvnestdb")
 DB_USERNAME = os.getenv("DB_USERNAME", "postgresql")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "1234")
+DB_PORT = os.getenv("DB_PORT", 5432)
+DATABASE_URL = f"postgresql+psycopg2://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-DATABASE_URL = f"postgresql+psycopg2://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+
 
 # The engine is exported to be used by the lifespan function in config.py
 engine = create_engine(DATABASE_URL)

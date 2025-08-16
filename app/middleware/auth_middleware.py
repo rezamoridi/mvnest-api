@@ -1,13 +1,21 @@
+
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from dotenv import load_dotenv
-from schemas import schemas
-
 import jwt
 import bcrypt
+from jwt.algorithms import get_default_algorithms
+from jwt.exceptions import InvalidAlgorithmError
+
+
+
+from schemas import schemas
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app_log_config import logger
+
+
 
 # --- Configuration ---
 # In a real application, load these from a .env file or other config source.
@@ -16,11 +24,35 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 
+
+def validate_jwt_algorithm_env() -> str:
+    """
+    Reads the JWT algorithm from environment and validates it.
+
+    Returns:
+        str: The validated algorithm.
+
+    Raises:
+        InvalidAlgorithmError: If the algorithm is not supported.
+    """
+    algo = os.getenv("ALGORITHM", "HS256")
+    # Remove any surrounding quotes or whitespace
+    algo = algo.strip().strip("'").strip('"')
+
+    if algo not in get_default_algorithms():
+        logger.critical(f"Invalid JWT algorithm from env: {algo}")
+        raise InvalidAlgorithmError(f"Invalid JWT algorithm: {algo}")
+
+    logger.info(f"JWT algorithm '{algo}' is valid.")
+    return algo
+
+
 # Reusable security scheme
 # This creates the "Authorize" button in the Swagger UI
 oauth2_scheme = HTTPBearer()
 
 # --- JWT Token Functions ---
+
 
 
 def create_access_token(sub: int, role: str, expires_delta: Optional[timedelta] = None):
@@ -41,17 +73,19 @@ def create_access_token(sub: int, role: str, expires_delta: Optional[timedelta] 
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    # Convert Pydantic model to dict, update exp and type
-    payload = {
-        "sub": str(sub),
-        "role": role,
-        "exp": expire,
-        "type": "access"
-    }
+    try:
+        # Convert Pydantic model to dict, update exp and type
+        payload = {
+            "sub": str(sub),
+            "role": role,
+            "exp": expire,
+            "type": "access"
+        }
 
-    encoded_jwt = jwt.encode(payload=payload, key=SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
+        encoded_jwt = jwt.encode(payload=payload, key=SECRET_KEY, algorithm=ALGORITHM)
+        return encoded_jwt
+    except Exception as e:
+        logger.exception("Error in create access token happend: {e}")
 
 
 

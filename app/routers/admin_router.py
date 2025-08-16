@@ -65,12 +65,13 @@ def get_all_users(
     search: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    is_deleted: bool = Query(default=False),
     service: AdminService = Depends(admin_service)
 ):
     """
     Fetches a paginated and searchable list of all users.
     """
-    return service.get_users(search=search, page=page, page_size=page_size)
+    return service.get_users(search, page, page_size, is_deleted)
 
 
 @router.put(
@@ -90,9 +91,27 @@ def update_user_details(
 
 
 
+
+@router.get(
+    "/user/{user_id}",
+    response_model= None,
+    summary=" Read a user details"
+)
+def read_user_detail(
+    service: AdminService = Depends(admin_service),
+    user_id: int = Path(ge=1),
+):
+    """
+    Updates a user's role or active status.
+    """
+    return service.get_user_by_id(user_id)
+
+
+
+
 @router.delete(
     "/users/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete a user"
 )
 def delete_user_by_id(
@@ -155,7 +174,7 @@ def create_movie(
 
 @router.delete(
     "/movies/{movie_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete a movie by ID",
     responses={404: {"description": "Movie not found"}}
 )
